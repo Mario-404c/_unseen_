@@ -10,8 +10,8 @@ import asyncio
 import requests
 
 config = RTCConfiguration(iceServers=[RTCIceServer(urls="stun:stun.l.google.com:19302")])
-link_invio_dati = "https://myliftz.altervista.org/Hole_punching/ricevi.php"
-link_richiesta_dati = "https://myliftz.altervista.org/Hole_punching/invia.php"
+link_invio_dati = "http://mario404c.altervista.org/Secchat/invia.php"
+link_richiesta_dati = "http://mario404c.altervista.org/Secchat/ricevi.php"
 
 # ----------------- FUNZIONI SOCKET -----------------
 
@@ -170,6 +170,8 @@ async def tenta_connessione_webRTC(indirizzo, porta, Nome, ricerca, peers, richi
             if not riga.strip():
                 continue
             Peer = riga.split(",")
+            if len(Peer) < 7:
+                continue
             stringa = str(indirizzo) + ":" + str(porta)
             if(Peer[4] == Nome or Peer[4] == stringa):
                 if(Peer[6] == "answer"):
@@ -217,6 +219,6 @@ async def tenta_connessione_webRTC(indirizzo, porta, Nome, ricerca, peers, richi
 
 async def tenta_connessione_diretta(ip_destinazione, porta_destinazione, Nome, Alg, chiave_pubblica, chiave, alfabeto, gpg, password, session):
     reader, writer = await asyncio.wait_for(
-        asyncio.open_connection(ip_destinazione, porta_destinazione), timeout=3
+        asyncio.open_connection(ip_destinazione, porta_destinazione), timeout=10
     )
     await handshake_connessione(reader, writer, Nome, Alg, chiave_pubblica, chiave, alfabeto, gpg, password, session, ip_destinazione, porta_destinazione)

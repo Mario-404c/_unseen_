@@ -14,13 +14,8 @@ config_path = os.path.join(BASE_DIR, "config.txt")
 
 peers = []
 
-async def print_information(Nome, ip_pubblico, porta_pubblica, tipo_nat, ip_privato, porta, Alg):
-    print("Sei loggato come '", Nome, "'")        
-    print("Indirizzo pubblico: \033[1m", ip_pubblico,  ":", porta_pubblica, "\033[0m , NAT type (approssimativo): \033[1m", tipo_nat, "\033[0m")
-    print("Indirizzo privato: \033[1m", ip_privato, ":", porta, "\033[0m")
-    print("L'algoritmo di crittografia selezionato è: \033[1m", Alg, "\033[0m")
-
 async def main():
+    selection.stampa_logo()
     fingerprint = None
     File_esiste = False
 
@@ -125,10 +120,12 @@ async def main():
                     print(chiave_pubblica)
                 chiave = 0
                 
-        selection.memorizza(Nome, porta, Alg, fingerprint, BASE_DIR)
+        selection.memorizza(Nome, porta, Alg, fingerprint, File_esiste, BASE_DIR)
 
     # Fine login
-    await print_information(Nome, ip_pubblico, porta_pubblica, tipo_nat, ip_privato, porta, Alg)
+    os.system("cls" if os.name == "nt" else "clear")
+    selection.stampa_logo()
+    selection.print_information(Nome, ip_pubblico, porta_pubblica, tipo_nat, ip_privato, porta, Alg)
     
 #    with open(os.path.join(BASE_DIR, "ip_list.json"), "r") as f:
 #            peers = json.load(f)
@@ -163,7 +160,7 @@ async def main():
         
         if ris == "1":
             os.system("cls" if os.name == "nt" else "clear")
-            await print_information(Nome, ip_pubblico, porta_pubblica, tipo_nat, ip_privato, porta, Alg)
+            selection.print_information(Nome, ip_pubblico, porta_pubblica, tipo_nat, ip_privato, porta, Alg)
             
             ip_destinazione = await asyncio.to_thread(input, "Inserisci ip destinatario: ")
             porta_destinazione = int(await asyncio.to_thread(input, "inserisci porta destinatario: "))
@@ -175,7 +172,15 @@ async def main():
             except(ConnectionRefusedError, ConnectionResetError, asyncio.TimeoutError, OSError):
                 print("Peer irraggiungibile per via diretta, tento con webRTC...")
                 ricerca = ip_destinazione + ":" + str(porta_destinazione)
-                await network.tenta_connessione_webRTC(ip_pubblico, porta_pubblica, Nome, ricerca, peers, richieste_in_attesa, chiave, chiave_pubblica, gpg, fingerprint, password, alfabeto, session, Alg, BASE_DIR)
+                try:
+                    await asyncio.wait_for(
+                        network.tenta_connessione_webRTC(ip_pubblico, porta_pubblica, Nome, ricerca, peers, richieste_in_attesa, chiave, chiave_pubblica, gpg, fingerprint, password, alfabeto, session, Alg, BASE_DIR),
+                        timeout=30
+                    )
+                except Exception as e:
+                    print(f"\033[31m E' stato impossibile stabilire una connessione (WebRTC): {e} \033[0m")
+            except Exception as e:
+                print(f"\033[31m E' stato impossibile stabilire una connessione: {e} \033[0m")
                 
 #           except:
 #               print("Errore nella connessione, peer irraggiungibile con webRTC, tento con tailscale...")
@@ -184,7 +189,7 @@ async def main():
             
         frase = f"In ascolto sulla porta {porta} "
         if ris == "2":
-            await print_information(Nome, ip_pubblico, porta_pubblica, tipo_nat, ip_privato, porta, Alg)
+            selection.print_information(Nome, ip_pubblico, porta_pubblica, tipo_nat, ip_privato, porta, Alg)
             Contatto = False
             while(Contatto == False):
                 if richieste_in_attesa:
@@ -219,7 +224,7 @@ async def main():
                             print("Non hai selezionato nessuna delle opzioni possibili!")
                 else:
                     os.system("cls" if os.name == "nt" else "clear")
-                    await print_information(Nome, ip_pubblico, porta_pubblica, tipo_nat, ip_privato, porta, Alg)
+                    selection.print_information(Nome, ip_pubblico, porta_pubblica, tipo_nat, ip_privato, porta, Alg)
                     frase = frase + "."
                     print(frase)
                     await asyncio.sleep(2)

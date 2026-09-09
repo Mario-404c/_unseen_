@@ -8,8 +8,8 @@ import gnupg, os, base64
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer
 
 config = RTCConfiguration(iceServers=[RTCIceServer(urls="stun:stun.l.google.com:19302")])
-link_invio_dati = "https://myliftz.altervista.org/Hole_punching/ricevi.php"
-link_richiesta_dati = "https://myliftz.altervista.org/Hole_punching/invia.php"
+link_invio_dati = "http://mario404c.altervista.org/Secchat/invia.php"
+link_richiesta_dati = "http://mario404c.altervista.org/Secchat/ricevi.php"
 MAX_TENTATIVI = 24
 
 def lista_peers(stato_richiesto, lista):
@@ -70,6 +70,8 @@ async def ascolta_richieste_webrtc(ip_personale, porta_personale, Nome, peers, r
                 if not riga.strip():
                     continue
                 Peer = riga.split(",")
+                if len(Peer) < 7:
+                    continue
                 stringa = str(ip_personale) + ":" + str(porta_personale)
                 if(Peer[4] == Nome or Peer[4] == stringa):
                     if(Peer[6] == "request"):
