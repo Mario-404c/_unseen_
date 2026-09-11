@@ -71,8 +71,18 @@ async def main():
                     passw = True       
 
     if dati_precedenti_selezione.lower() == "n" or File_esiste == False:
-        Nome = selection.seleziona_nome()
-                
+        Nome_disponibile = False
+        retry = False
+        while Nome_disponibile == False:
+            Nome = selection.seleziona_nome(retry)
+            esito = selection.ceck_nome(Nome)
+            if esito == "OK":
+                print("Nome disponibile!")
+                Nome_disponibile = True
+            elif esito == "exists":
+                print("Nome non disponibile, inseriscine un'altro")
+                retry = True
+            
         Alg = selection.seleziona_alg()
         
         porta = selection.seleziona_porta()
@@ -119,8 +129,15 @@ async def main():
                 if ris.lower() == "y":
                     print(chiave_pubblica)
                 chiave = 0
-                
+        
+        esito = selection.memorizza_altervista(Nome, ip_pubblico, porta_pubblica, fingerprint)
+        if esito == "done":
+            print("Hai correttamente memorizzato i tuoi dati sul server, sei autenticato") 
+        else:
+            print("C'è stato un errore nell'autenticazione al server")
+                   
         selection.memorizza(Nome, porta, Alg, fingerprint, File_esiste, BASE_DIR)
+        input("Login effettuato, premi invio per continuare... ")
 
     # Fine login
     os.system("cls" if os.name == "nt" else "clear")
@@ -181,12 +198,12 @@ async def main():
                     print(f"\033[31m E' stato impossibile stabilire una connessione (WebRTC): {e} \033[0m")
             except Exception as e:
                 print(f"\033[31m E' stato impossibile stabilire una connessione: {e} \033[0m")
-                
+
 #           except:
 #               print("Errore nella connessione, peer irraggiungibile con webRTC, tento con tailscale...")
 #               peers_ref = {(p["ip"], p["porta"]): p for p in peers}
 #               peers_ref[ip_destinazione, porta_destinazione]["stato"] = "unreachable"
-            
+
         frase = f"In ascolto sulla porta {porta} "
         if ris == "2":
             selection.print_information(Nome, ip_pubblico, porta_pubblica, tipo_nat, ip_privato, porta, Alg)

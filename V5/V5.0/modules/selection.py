@@ -1,4 +1,4 @@
-import time, os
+import time, os, requests
 
 def stampa_logo():
     art=r"""
@@ -43,20 +43,22 @@ def seleziona_porta():
             print("Non hai selezionato nessuna delle opzioni possibili! (y/n)")
     return indirizzo
 
-def seleziona_nome():
+def seleziona_nome(Retry):
     B = True
-    NomeServ = "Server"
-    while B:
-        risposta = input("Vuoi scegliere un \033[1m nome \033[0m ? (y/n): ")
-        if risposta.lower() == "y" or risposta.lower() == "s":
-            NomeServ = input("Inserisci il \033[1m nome \033[0m: ")
-            B = False
-        elif risposta.lower() == "n":
-            B = False
-        else:
-            print("Non hai selezionato nessuna delle opzioni possibili! (y/n)")
+    if Retry == True:
+        Nome = input("Reinserire: ")
+    else:
+        while B:
+            Nome = input("Inserisci il tuo \033[1m nome \033[0m: (questo nome sara' prmanentemente associato alla tua chiave pubblica)")
+            risposta = input(f"Questo \033[1m nome \033[0m e' corretto?: \033[1m {Nome} \033[0m (y/n)")
+            if risposta.lower() == "y" or risposta.lower() == "s":
+                B = False
+            elif risposta.lower() == "n":
+                print("Reinserisci il nome")
+            else:
+                print("Non hai selezionato nessuna delle opzioni possibili! (y/n)")
             
-    return NomeServ
+    return Nome
 
 def seleziona_alg():
     C = True
@@ -95,4 +97,28 @@ def memorizza(Nome, porta, Alg, fingerprint, File_esiste, base_dir):
             Esci = True
         else:
             print("Non hai inserito nessuna delle opzioni possibili!")
-     
+
+def ceck_nome(Nome):
+    payload = {
+        "user": Nome,
+        "ip": "",
+        "porta": "",
+        "fingerprint": "",
+        "tipo": "ceck"
+        }
+        
+    response = requests.get(url = "http://mario404c.altervista.org/Secchat/ceck_username.php", params = payload)
+
+    return response.text # OK / exists
+
+def memorizza_altervista(Nome, indirizzo, porta, fingerprint):
+    payload = {
+        "user": Nome,
+        "ip": indirizzo,
+        "porta": porta,
+        "fingerprint": fingerprint,
+        "tipo": "send"
+        }
+        
+    response = requests.get(url = "http://mario404c.altervista.org/Secchat/ceck_username.php", params = payload)
+    return response.text
