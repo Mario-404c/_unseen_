@@ -10,8 +10,8 @@ import asyncio
 import requests
 
 config = RTCConfiguration(iceServers=[RTCIceServer(urls="stun:stun.l.google.com:19302")])
-link_invio_dati = "http://mario404c.altervista.org/Secchat/invia.php"
-link_richiesta_dati = "http://mario404c.altervista.org/Secchat/ricevi.php"
+link_invio_dati = "http://mario404c.altervista.org/Secchat/ricevi.php"
+link_richiesta_dati = "http://mario404c.altervista.org/Secchat/invia.php"
 
 # ----------------- FUNZIONI SOCKET -----------------
 

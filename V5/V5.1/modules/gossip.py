@@ -1,15 +1,16 @@
 import time
 import json
 import asyncio
-import random, requests
+import random, requests, secrets, string
 from . import network
+from . import selection
 import tempfile
 import gnupg, os, base64
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer
 
 config = RTCConfiguration(iceServers=[RTCIceServer(urls="stun:stun.l.google.com:19302")])
-link_invio_dati = "http://mario404c.altervista.org/Secchat/invia.php"
-link_richiesta_dati = "http://mario404c.altervista.org/Secchat/ricevi.php"
+link_invio_dati = "http://mario404c.altervista.org/Secchat/ricevi.php"
+link_richiesta_dati = "http://mario404c.altervista.org/Secchat/invia.php"
 MAX_TENTATIVI = 24
 
 def lista_peers(stato_richiesto, lista):
@@ -37,7 +38,7 @@ class DataChannelWriter:
     def close(self):
         if self._channel.readyState == "open":
             self._channel.close()
-
+ 
     async def wait_closed(self):
         while self._channel.readyState not in ("closed", "closing"):
             await asyncio.sleep(0.05)
@@ -110,6 +111,14 @@ async def ascolta_richieste_webrtc(ip_personale, porta_personale, Nome, peers, r
             def on_state_change():
                 print(pc.connectionState)
                 
+            @pc.on("iceconnectionstatechange")
+            def on_ice_state():
+                print("ICE connection state:", pc.iceConnectionState)
+
+            @pc.on("icegatheringstatechange")
+            def on_gathering_state():
+                print("ICE gathering state:", pc.iceGatheringState)
+                
             
             dati = json.loads(base64.b64decode(blob_offerer).decode())
             sdp_ricevuto = dati["sdp"]
@@ -140,15 +149,6 @@ async def ascolta_richieste_webrtc(ip_personale, porta_personale, Nome, peers, r
                 
             requests.get(url = link_invio_dati, params = payload)
             
-            attesa = timestamp_inizio - time.time()
-            if attesa > 0:
-                print(f"Attendo ancora {attesa} secondi per la sincronizzazione... ")
-                await asyncio.sleep(attesa)
-            else:
-                print("Timestamp già passato, procedo subito")
-            
-            
-            
             while pc.connectionState != "connected":
                 if pc.connectionState == "failed":
                     print("Connessione fallita")
@@ -158,15 +158,15 @@ async def ascolta_richieste_webrtc(ip_personale, porta_personale, Nome, peers, r
             while canale is None:
                 await asyncio.sleep(0.1)
                 
-                payload = {
-                "id": Nome,
-                "ip": ip_personale,
-                "porta": porta_personale,
-                "blob": "",
-                "target": "",
-                "timestamp": "",
-                "type": "remove"
-                }
+            payload = {
+            "id": Nome,
+            "ip": ip_personale,
+            "porta": porta_personale,
+            "blob": "",
+            "target": "",
+            "timestamp": "",
+            "type": "remove"
+            }
                     
             requests.get(url = link_invio_dati, params = payload)                               # Pulisci server
             
@@ -214,15 +214,18 @@ async def gestisci_connessione(reader, writer, peers, richieste_in_attesa, chiav
         ricerca = False
             
     elif data.decode() == "CHAT_REQUEST":                # Richiesta chat | Client --> Server
-        writer.write("OK_CHAT".encode())                 # Conferma | Client <-- Server
-        await writer.drain()
+        check1 = False
+        check2 = False
+        await network.invia_messaggio(writer, "OK_CHAT")        # Conferma | Client <-- Server
         
-        data = await reader.read(1024)
-        Nome_client = data.decode()                      # Ricezione nome | Client --> Server
-        print("Stai parlando con: ", Nome_client)
+        Nome_client = await network.ricevi_messaggio(reader)    # Ricezione nome | Client --> Server
+
+        await network.invia_messaggio(writer, Nome)                      # Invio nome | Client <-- Server
+
+        fingerprint_ricevuto = await network.ricevi_messaggio(reader)                  # Ricezione Fingerprint | Client --> Server
+
+        await network.invia_messaggio(writer, fingerprint)            # Invio Fingerprint | Client <-- Server
         
-        writer.write(Nome.encode())                      # Invio nome | Client <-- Server
-        await writer.drain()
         if tipo == "diretto":
             richiesta = {
             "nome": Nome_client,
@@ -239,53 +242,98 @@ async def gestisci_connessione(reader, writer, peers, richieste_in_attesa, chiav
             richiesta = {
                 "decisione": "ACCETTATA"
             }
-        
-        if richiesta["decisione"] == "ACCETTATA" or tipo == "webrtc":
-            writer.write("ACCEPTED".encode())               # Invio conferma connessione accettata | Client <-- Server
-            await writer.drain()
-            
-            data = await reader.read(1024)                  # Ricezione tipo alg | Client --> Server
-            Alg_client = data.decode()
-        
-            if(Alg.lower() == "pgp" and Alg_client.lower() == "pgp"):
-                writer.write("OK_PGP".encode())             # Conferma tipo alg | Client <-- Server
-                await writer.drain()
-                
-                print("Avvio lo scambio di chiavi pubbliche...")
-                
-                lunghezza_bytes = await reader.readexactly(4)
-                lunghezza = int.from_bytes(lunghezza_bytes, 'big')
-                chiave_pubblica_client = (await reader.readexactly(lunghezza)).decode('utf-8')
-                                                                                                # Scambio chiavi
-                dati = chiave_pubblica.encode('utf-8')
-                writer.write(len(dati).to_bytes(4, 'big') + dati)
-                await writer.drain()
-                
-                with tempfile.TemporaryDirectory() as cartella_temp:
-                    gpg_sessione = gnupg.GPG(gnupghome=cartella_temp)               # Keyring temporaneo
-                    risultato = gpg_sessione.import_keys(chiave_pubblica_client)    # Import chiave pubblica client
-                    fingerprint_client = risultato.fingerprints[0]
 
-                    asyncio.create_task(network.ricevi(reader, writer, Nome_client, Alg, chiave, alfabeto, gpg, password))
-                    await network.invia_async(reader, writer, Alg, chiave, gpg_sessione, fingerprint_client, alfabeto, session)
-                
+        # Verifica username - fingerprint lato server
+        fingerprint_target = None
+        response = await asyncio.to_thread(selection.ceck_nome, Nome_client)
+        if response == "OK":
+            esito = None
+            
+        else:
+            esito, ip_destinazione, porta_destinazione, fingerprint_target = response.split(",", 3)
+            
+        if esito == "exists" and fingerprint_target == fingerprint_ricevuto:
+            print(f"Il peer che vuole contattarti è autenticato sul server come {Nome_client} - {fingerprint_target} , procedo... ")
+            check1 = True
+        else:
+            ris = await asyncio.to_thread(selection.y_n, f"Il peer {Nome_client} NON è riconosciuto dal server, procedere? (y/n)")
+            if ris == "y":
+                check1 = True
+            else:
+                check1 = False
+
+        if(richiesta["decisione"] == "ACCETTATA" or tipo == "webrtc") and check1:
+            await network.invia_messaggio(writer, "ACCEPTED")               # Invio conferma connessione accettata | Client <-- Server
+            
+            Alg_client = await network.ricevi_messaggio(reader)                  # Ricezione tipo alg | Client --> Server
+        
+            if(Alg.lower() ==  Alg_client.lower()):
+                await network.invia_messaggio(writer, "OK_ALG")             # Conferma tipo alg | Client <-- Server
             elif(Alg.lower() !=  Alg_client.lower()):
-                writer.write("ALG_MISMATCH".encode())            # Rifiuto tipo alg | Client <-- Server
-                await writer.drain()
+                await network.invia_messaggio(writer, "ALG_MISMATCH")            # Rifiuto tipo alg | Client <-- Server
                 print(f"Algoritmo incompatibile con {Nome_client}, lui usa {Alg_client}, connessione chiusa")
                 writer.close()
                 await writer.wait_closed()
+                return
             
-            else:
-                gpg_sessione = None
-                fingerprint_client = None
+            print("Avvio lo scambio di chiavi pubbliche...")
+            
+            chiave_pubblica_client = await network.ricevi_messaggio(reader)             # Ricezione chiave pubblica
+            await network.invia_messaggio(writer, chiave_pubblica)                       # Invio chiave pubblica
+            
+            with tempfile.TemporaryDirectory() as cartella_temp:
+                gpg_sessione = gnupg.GPG(gnupghome=cartella_temp)               # Keyring temporaneo
+                risultato = gpg_sessione.import_keys(chiave_pubblica_client)    # Import chiave pubblica client
+                if not risultato.fingerprints:
+                    print("Errore nell'import della chiave pubblica dell'altro peer! Chiudo... ")
+                    writer.close()
+                    return
+                fingerprint_client = risultato.fingerprints[0]
+
+                # Verifica autenticità fingerprint
                 
-            asyncio.create_task(network.ricevi(reader, writer, Nome_client, Alg, chiave, alfabeto, gpg, password))
-            await network.invia_async(reader, writer, Alg, chiave, gpg_sessione, fingerprint_client, alfabeto, session)
+                if fingerprint_client != fingerprint_ricevuto:
+                    print("Il fingerprint dichiarato non corrisponde alla chiave ricevuta! Chiudo...")
+                    writer.close()
+                    return
+                
+                # Verifica con firma
+                
+                alf = string.ascii_letters  # tutte le lettere: a-z e A-Z
+                frase_casuale = ''.join(secrets.choice(alf) for _ in range(32))
+                
+                frase_casuale_ricevuta = await network.ricevi_messaggio(reader)                 # ricezione frase casuale | Client --> Server
+                await network.invia_messaggio(writer, frase_casuale)                  # Invio frase casuale | Client <-- Server
+
+                firma = gpg.sign(
+                    frase_casuale_ricevuta,
+                    keyid=fingerprint,
+                    passphrase=password,
+                    extra_args=['--pinentry-mode', 'loopback']
+                )
+                
+                firma_client = await network.ricevi_messaggio(reader)   # Ricezione firma | Client --> Server     
+
+                await network.invia_messaggio(writer, str(firma))       # Invio firma | Client <-- Server
+
+                risultato = gpg_sessione.verify(str(firma_client))
+                contenuto = gpg_sessione.decrypt(str(firma_client))
+                testo_firmato = str(contenuto).strip()
+
+                if risultato.valid and risultato.fingerprint == fingerprint_client and testo_firmato == frase_casuale:
+                    print(f"L'utente {Nome_client} si è autenticato correttamente")
+                    check2 = True
+                else:
+                    print(f"L'utente {Nome_client} non ha passato il processo di autenticazione, potresti star subendo un tentativo di attacco")
+                    writer.close()
+                    
+                if check2 == True:
+                    asyncio.create_task(network.ricevi(reader, writer, Nome_client, Alg, chiave, alfabeto, gpg, password))
+                    await network.invia_async(reader, writer, Alg, chiave, gpg_sessione, fingerprint_client, alfabeto, session)
             
         else:
-            writer.write("REFUSED".encode())
-            await writer.drain()
+            await network.invia_messaggio(writer, "REFUSED")
+            
 
             
 

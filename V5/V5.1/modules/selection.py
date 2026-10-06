@@ -134,3 +134,15 @@ def memorizza_altervista(Nome, indirizzo, porta, fingerprint):
         
     response = requests.get(url = "http://mario404c.altervista.org/Secchat/ceck_username.php", params = payload)
     return response.text
+
+def y_n(domanda):
+    esci = False
+    while esci == False:
+        print(domanda)
+        risposta = input()
+        if risposta.lower() == "y" or risposta.lower() == "n":
+            esci = True
+        else:
+            os.system("cls" if os.name == "nt" else "clear")
+            print("Non hai inserito una risposta valida!")
+    return risposta.lower()

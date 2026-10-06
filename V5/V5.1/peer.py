@@ -123,10 +123,8 @@ async def main():
                 fingerprint = key.fingerprint
                 chiave_pubblica = gpg.export_keys(key.fingerprint)
                 print("Fingerprint della tua nuova chiave: \n", fingerprint)
-                ris = await asyncio.to_thread(
-                    input, "Vuoi visualizzare la tua chiave pubblica? | y/n \n"
-                )
-                if ris.lower() == "y":
+                ris = selection.y_n("Vuoi visualizzare la tua nuova chiave pubblica? (y/n)")
+                if ris == "y":
                     print(chiave_pubblica)
                 chiave = 0
         
@@ -182,15 +180,17 @@ async def main():
             ricerca = await asyncio.to_thread(input, "Inserisci l'username o l'ip:porta del destinatario: ")
             
             procedi = False
-            ip_destinazione, porta_destinazione, username_target = None, None, None
+            bypass_auth_username = False
+            ip_destinazione, porta_destinazione, username_target, fingerprint_destinatario = None, None, None, None
             if ":" in ricerca:
                 ip_destinazione, porta_destinazione = ricerca.split(":", 1)
                 print(f"Cerco una corrispondenza per gli indirizzo e porta: {ricerca}")
                 response = selection.ceck_indirizzo(ip_destinazione, porta_destinazione)
                 if response == "OK":
-                    ris = input("L'indirizzo cercato non risulta essere salvato sul server, questo significa che non è possibile verificare il fingerprint server-side, tento lo stesso di contattarlo? (y/n)")
-                    if ris.lower() == "y":
+                    ris = selection.y_n("L'indirizzo cercato non risulta essere salvato sul server, questo significa che non è possibile verificare il fingerprint server-side, tento lo stesso di contattarlo? (y/n)")
+                    if ris == "y":
                         procedi = True
+                        bypass_auth_username = True
                 elif response.split(",", 2)[0] == "exists":
                     trash, username_target, fingerprint_destinatario = response.split(",", 3)
                     print(f"Corrispondenza trovata sul server per l'username '{username_target}': ")
@@ -214,18 +214,15 @@ async def main():
             if procedi == True:
                 try:
                     print("Provo ad aprire una connessione diretta...")
-                    await network.tenta_connessione_diretta(ip_destinazione, porta_destinazione, Nome, Alg, chiave_pubblica, chiave, alfabeto, gpg, password, session, username_target, fingerprint_destinatario)
+                    await network.tenta_connessione_diretta(ip_destinazione, porta_destinazione, Nome, Alg, chiave_pubblica, fingerprint, chiave, alfabeto, gpg, password, session, username_target, fingerprint_destinatario, bypass_auth_username)
                         
                 except(ConnectionRefusedError, ConnectionResetError, asyncio.TimeoutError, OSError):
                     print("Peer irraggiungibile per via diretta, tento con webRTC...")
                     ricerca = ip_destinazione + ":" + str(porta_destinazione)
                     try:
-                        await asyncio.wait_for(
-                            network.tenta_connessione_webRTC(ip_pubblico, porta_pubblica, Nome, ricerca, peers, richieste_in_attesa, chiave, chiave_pubblica, gpg, fingerprint, password, alfabeto, session, Alg, username_target, fingerprint_destinatario, BASE_DIR),
-                            timeout=30
-                        )
+                        await network.tenta_connessione_webRTC(ip_pubblico, porta_pubblica, Nome, ricerca, peers, richieste_in_attesa, chiave, chiave_pubblica, gpg, fingerprint, password, alfabeto, session, Alg, username_target, fingerprint_destinatario, bypass_auth_username, BASE_DIR)
                     except Exception as e:
-                        print(f"\033[31m E' stato impossibile stabilire una connessione (WebRTC): {e} \033[0m")
+                        print(f"\033[31m E' stato impossibile stabilire una connessione (WebRTC): {e!r} \033[0m")
                 except Exception as e:
                     print(f"\033[31m E' stato impossibile stabilire una connessione: {e} \033[0m")
 

@@ -1,0 +1,38 @@
+Questo è un certificato di revoca per la chiave OpenPGP:
+
+pub   rsa4096 2026-09-18 [SCEAR]
+      5F48E40C823CBDA71A6C0845A26D570C15F3D49A
+uid          Mario <Talk@secure.com>
+
+Un certificato di revoca è una sorta di "interruttore di emergenza" per
+dichiarare pubblicamente che una certa chiave non deve essere più usata.
+Non è possibile ritirare un certificato di revoca una volta che è stato
+pubblicato.
+
+Utilizzare per revocare questa chiave in caso di compromissione o perdita di
+la chiave segreta.  Tuttavia, se la chiave segreta è ancora accessibile,
+è meglio generare un nuovo certificato di revoca e dare
+un motivo per la revoca.  Per i dettagli, vedere la descrizione di
+del comando gpg "--generate-revocation" nel manuale GnuPG.
+
+Per evitare un uso accidentale di questo file, sono stati aggiunti due
+punti prima dei 5 trattini in basso. Rimuovere tali due punti con un
+editor di testo prima di importare e pubblicare il certificato di revoca.
+
+:-----BEGIN PGP PUBLIC KEY BLOCK-----
+Comment: This is a revocation certificate
+
+iQI2BCABCAAgFiEEX0jkDII8vacabAhFom1XDBXz1JoFAmqtdfoCHQAACgkQom1X
+DBXz1JpFAw/+KyuJQDd1UU3i49LNdclXqJnD7XCVsnAh3ncwZ2z+wufZkrVaBL/X
+ZXcxulBMjSDxuwc5d9g1LMT2nrJPW6x052HdI8kUaTX/7cQKD6xYPw4kWAXDB0zw
+fBRFOP+tR6tlPfxzYDr4TIe2/H4Jggr1o590ua7+liRvGGioyCAqqpp6oBe8Z+F6
+TkekNi1/doR21t5QxuJ0ckP6ZI1gjyUzvET4tr5XzJ+A4JB1X0gI0nINhn4qg8kV
+o7JJTyiyi8+X5WJi87sPG4YpD6pN1x3odTa3FQGcSIorBrXXaTdF3D7s6vrWRRSH
+GKGDumu7jVwl0Yfm98CS1A1LdIUPjSJV0Zbzs+YzHb4+zm0u0QxGm/yAniHBEbsv
+dVkQdpJkIxb8swkG23JVGZsCklQR/npPNqguLWRsW5XtN1985hZhhvonzborh50j
+p15ZmBQ0GFyAAivsmyuQNfyPtC94H3TTbJz9sIWAkqemcTTo1zwphK38yrXuiJVz
+UgAlFipHwWw6v5vaVTGbrAhfFuTsChpIPt/GMBMdjZiTdU7cPi94+lFI4Cko6Upw
+set1B+G7Zpyb+vWKX7+drooHAo7HhSB8I0DUMDJBcGoe9aJZCg+C/tZlTU4Dqn13
+UDp5WBaFwifcTwo2emM63jOc10hx5KCD6G0zzsZGaJZ9gN+Ln7+8nNY=
+=haZR
+-----END PGP PUBLIC KEY BLOCK-----

@@ -8,8 +8,8 @@ import gnupg, os, base64
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer
 
 config = RTCConfiguration(iceServers=[RTCIceServer(urls="stun:stun.l.google.com:19302")])
-link_invio_dati = "http://mario404c.altervista.org/Secchat/invia.php"
-link_richiesta_dati = "http://mario404c.altervista.org/Secchat/ricevi.php"
+link_invio_dati = "http://mario404c.altervista.org/Secchat/ricevi.php"
+link_richiesta_dati = "http://mario404c.altervista.org/Secchat/invia.php"
 MAX_TENTATIVI = 24
 
 def lista_peers(stato_richiesto, lista):
