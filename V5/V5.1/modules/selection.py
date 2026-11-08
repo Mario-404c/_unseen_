@@ -1,4 +1,4 @@
-import time, os, requests
+import time, os, requests, json, secrets, random
 
 def stampa_logo():
     art=r"""
@@ -59,23 +59,6 @@ def seleziona_nome(Retry):
                 print("Non hai selezionato nessuna delle opzioni possibili! (y/n)")
             
     return Nome
-
-def seleziona_alg():
-    C = True
-    while C:
-        risposta = input("Scegli la crittografia |\033[34m Cesare, Xor, pgp \033[0m|: ")
-        if risposta.lower() == "cesare":
-            Alg = "cesare"
-            C = False
-        elif risposta.lower() == "xor":
-            Alg = "xor"
-            C = False
-        elif risposta.lower() == "pgp":
-            Alg = "pgp"
-            C = False
-        else:
-            print("Non hai selezionato nessuna delle opzioni possibili! |\033[34m Cesare, Xor, pgp \033[0m|")
-    return Alg
 
 def memorizza(Nome, porta, Alg, fingerprint, File_esiste, base_dir):
     if File_esiste == True:
@@ -146,3 +129,49 @@ def y_n(domanda):
             os.system("cls" if os.name == "nt" else "clear")
             print("Non hai inserito una risposta valida!")
     return risposta.lower()
+
+def known_hosts(richiesta, ricerca, new_username, new_ip, new_port, new_fingerprint, base_dir):
+    path = os.path.join(base_dir, "known_hosts.json")
+    with open(path, "r", encoding="utf-8") as f:
+        dati = json.load(f)
+    
+    if richiesta == "exists?":
+        if ":" in ricerca:
+            ip, porta = ricerca.split(":", 1)
+            for h in dati:
+                if ip == h["ip"] and str(porta) == str(h["porta"]):
+                    username = h["nome"]
+                    fingerprint = h["fingerprint"]
+                    return username, ip, porta, fingerprint
+        else:
+            username = ricerca
+            for h in dati:
+                if username == h["nome"]:
+                    ip = h["ip"]
+                    porta = h["porta"]
+                    fingerprint = h["fingerprint"]
+                    return username, ip, porta, fingerprint
+
+                
+        return None, None, None, None
+                
+    elif richiesta == "load":
+        load = {
+            "nome":new_username,
+            "ip":new_ip,
+            "porta":new_port,
+            "fingerprint":new_fingerprint
+        }
+        dati.append(load)
+        
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(dati, f, indent=2, ensure_ascii=False)
+        return "OK"
+    
+def crea_tempuser():
+    nome = f"User-{secrets.token_hex(4)}"
+    porta_locale = random.randint(1025, 49151)
+    alg = "pgp"
+    password = secrets.token_hex(16)
+    
+    return nome, porta_locale, alg, password

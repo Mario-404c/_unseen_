@@ -7,12 +7,19 @@ from modules import encryption, network, selection, gossip
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 session = PromptSession()
-alfabeto = "<|b'0#c)d_e$@&61fg!=£hi*j5:klmçùn]2?op^qrs(tuàv,wx+yz7 A+BC.8DèEF;3GHIJaLM[NOòPQéR4>STU-èV*WìX9YZ"
 gpg = gnupg.GPG(gnupghome=os.path.join(BASE_DIR,"modules", "keys"))
 subprocess.run(["gpgconf", "--homedir", os.path.join(BASE_DIR,"modules", "keys"), "--kill", "gpg-agent"])
 config_path = os.path.join(BASE_DIR, "config.txt")
 
 peers = []
+with open(os.path.join(BASE_DIR, "tempkeys.json"), "r") as f:
+    tempkeys = json.load(f)
+    for k in tempkeys:
+        priv = gpg.delete_keys(k["fingerprint"], secret=True, expect_passphrase=False)
+        pub = gpg.delete_keys(k["fingerprint"])
+        tempkeys.remove(k)
+with open(os.path.join(BASE_DIR, "tempkeys.json"), "w") as f:
+    json.dump([], f)
 
 async def main():
     selection.stampa_logo()
@@ -33,109 +40,120 @@ async def main():
     dati_precedenti_selezione = "n"
     richieste_in_attesa = []
 
-    if os.path.exists(config_path) and os.path.getsize(config_path) > 0:
-        File_esiste = True
-        dati_precedenti_selezione = input("\033[33m Vuoi usare i dati precedenti? (y/n) \033[0m").strip()
-        if dati_precedenti_selezione.lower() == "y" or dati_precedenti_selezione.lower() == "s":
-            with open(config_path, "r") as f:
-                righe = f.readlines()   
-                righe = [riga.strip() for riga in righe]
+    temporaneo = selection.y_n("Loggare come utente temporaneo? (y/n)")
+    if temporaneo == "y":
+        Nome, porta, Alg, password = selection.crea_tempuser()
+        input_data = gpg.gen_key_input(
+            name_real= Nome,
+            name_email='Talk@secure.com',
+            passphrase=password,
+            key_type='RSA',
+            key_length=2048,
+            )
+        key = gpg.gen_key(input_data)
+        if not key.fingerprint:
+            print("Generazione della chiave fallita")
+            sys.exit(1)
+        fingerprint = key.fingerprint
+        chiave_pubblica = gpg.export_keys(key.fingerprint)
+        me = {
+            "fingerprint": fingerprint,
+            "timestamp": time.time()
+            }
+        tempkeys.append(me)
+        with open(os.path.join(BASE_DIR, "tempkeys.json"), "w") as f:
+            json.dump(tempkeys, f, indent=2)
+        
+        
+    else:
+        if os.path.exists(config_path) and os.path.getsize(config_path) > 0:
+            File_esiste = True
+            dati_precedenti_selezione = input("\033[33m Vuoi usare i dati precedenti? (y/n) \033[0m").strip()
+            if dati_precedenti_selezione.lower() == "y" or dati_precedenti_selezione.lower() == "s":
+                with open(config_path, "r") as f:
+                    righe = f.readlines()   
+                    righe = [riga.strip() for riga in righe]
 
-                Nome = righe[0]
-                porta = int(righe[1])
-                Alg = righe[2]
-                ultimo_gossip = righe[3]
-                fingerprint = righe[4]
-                chiave = 0
+                    Nome = righe[0]
+                    porta = int(righe[1])
+                    Alg = righe[2]
+                    ultimo_gossip = righe[3]
+                    fingerprint = righe[4]
+                    
+                passw = False
+                t = 3
+                while passw == False:
+                    print("Inserisci password per l'utente: ", Nome)
+                    password = getpass.getpass()
+                    result = gpg.sign(
+                        "test",
+                        keyid=fingerprint,
+                        passphrase=password,
+                        extra_args=['--pinentry-mode', 'loopback']
+                    )
+                    if result.status != 'signature created' or not result.data:
+                        if t == 0:
+                            print("Tentativi esauriti, chiusura del programma... ")
+                            sys.exit()
+                        print(f"Password sbagliata, ti restano \033[31m {t} \033[0m tentativi.")
+                        t = t - 1
+                    else:
+                        print("Password corretta")
+                        chiave_pubblica = gpg.export_keys(fingerprint)
+                        passw = True       
+
+        if dati_precedenti_selezione.lower() == "n" or File_esiste == False:
+            Nome_disponibile = False
+            retry = False
+            while Nome_disponibile == False:
+                Nome = selection.seleziona_nome(retry)
+                esito = selection.ceck_nome(Nome)
+                if esito == "OK":
+                    print("Nome disponibile!")
+                    Nome_disponibile = True
+                elif esito.split(",", 3)[0] == "exists":
+                    print("Nome non disponibile, inseriscine un'altro")
+                    retry = True
                 
-            passw = False
-            t = 3
-            while passw == False:
-                print("Inserisci password per l'utente: ", Nome)
-                password = getpass.getpass()
-                result = gpg.sign(
-                    "test",
-                    keyid=fingerprint,
-                    passphrase=password,
-                    extra_args=['--pinentry-mode', 'loopback']
-                )
-                if result.status != 'signature created' or not result.data:
-                    if t == 0:
-                        print("Tentativi esauriti, chiusura del programma... ")
-                        sys.exit()
-                    print(f"Password sbagliata, ti restano \033[31m {t} \033[0m tentativi.")
-                    t = t - 1
-                else:
-                    print("Password corretta")
-                    chiave_pubblica = gpg.export_keys(fingerprint)
-                    passw = True       
-
-    if dati_precedenti_selezione.lower() == "n" or File_esiste == False:
-        Nome_disponibile = False
-        retry = False
-        while Nome_disponibile == False:
-            Nome = selection.seleziona_nome(retry)
-            esito = selection.ceck_nome(Nome)
-            if esito == "OK":
-                print("Nome disponibile!")
-                Nome_disponibile = True
-            elif esito.split(",", 3)[0] == "exists":
-                print("Nome non disponibile, inseriscine un'altro")
-                retry = True
+            Alg = "pgp"
             
-        Alg = selection.seleziona_alg()
-        
-        porta = selection.seleziona_porta()
-        
-        password = getpass.getpass("Scegli una password per la crittografia (Obbligatorio): ")
-        
-        if Alg.lower() == "cesare" or Alg.lower() == "xor":
-                chiave = encryption.crea_chiave(password)
-                print("La tua chiave di crittografia è: \033[93;40m", chiave, "\033[0m")
-                print("Sto generando la coppia di chiavi... ")
-                input_data = gpg.gen_key_input(
-                    name_real= Nome,
-                    name_email='Talk@secure.com',
-                    passphrase=password,
-                    key_type='RSA',
-                    key_length=4096,
-                    )
-                key = gpg.gen_key(input_data)
-                fingerprint = key.fingerprint
-                chiave_pubblica = gpg.export_keys(key.fingerprint)
-                print("Fingerprint della tua nuova chiave: \n", fingerprint)
-                ris = await asyncio.to_thread(
-                    input, "Vuoi visualizzare la tua chiave pubblica? | y/n \n"
+            porta = selection.seleziona_porta()
+            
+            while True:
+                password = getpass.getpass("Scegli una password per la crittografia (Obbligatorio): ")
+                controllo = getpass.getpass("Reinserisci la password: ")
+                if password == controllo:
+                    break
+                else:
+                    print("Le due password inserite sono diverse!")
+
+            print("Sto generando la coppia di chiavi... ")
+            input_data = gpg.gen_key_input(
+                name_real= Nome,
+                name_email='Talk@secure.com',
+                passphrase=password,
+                key_type='RSA',
+                key_length=4096,
                 )
-                if ris.lower() == "y":
-                    print(chiave_pubblica)
-                
-        elif Alg.lower() == "pgp" and fingerprint == None:
-                print("Sto generando la coppia di chiavi... ")
-                input_data = gpg.gen_key_input(
-                    name_real= Nome,
-                    name_email='Talk@secure.com',
-                    passphrase=password,
-                    key_type='RSA',
-                    key_length=4096,
-                    )
-                key = gpg.gen_key(input_data)
-                fingerprint = key.fingerprint
-                chiave_pubblica = gpg.export_keys(key.fingerprint)
-                print("Fingerprint della tua nuova chiave: \n", fingerprint)
-                ris = selection.y_n("Vuoi visualizzare la tua nuova chiave pubblica? (y/n)")
-                if ris == "y":
-                    print(chiave_pubblica)
-                chiave = 0
-        
-        esito = selection.memorizza_altervista(Nome, ip_pubblico, porta_pubblica, fingerprint)
-        if esito == "done":
-            print("Hai correttamente memorizzato i tuoi dati sul server, sei autenticato") 
-        else:
-            print("C'è stato un errore nell'autenticazione al server")
-                   
-        selection.memorizza(Nome, porta, Alg, fingerprint, File_esiste, BASE_DIR)
-        input("Login effettuato, premi invio per continuare... ")
+            key = gpg.gen_key(input_data)
+            if not key.fingerprint:
+                print("Generazione della chiave fallita")
+                sys.exit(1)
+            fingerprint = key.fingerprint
+            chiave_pubblica = gpg.export_keys(key.fingerprint)
+            print("Fingerprint della tua nuova chiave: \n", fingerprint)
+            ris = selection.y_n("Vuoi visualizzare la tua nuova chiave pubblica? (y/n)")
+            if ris == "y":
+                print(chiave_pubblica)
+            
+            esito = selection.memorizza_altervista(Nome, ip_pubblico, porta_pubblica, fingerprint)
+            if esito == "done":
+                print("Hai correttamente memorizzato i tuoi dati sul server, sei autenticato") 
+            else:
+                print("C'è stato un errore nell'autenticazione al server")
+                    
+            selection.memorizza(Nome, porta, Alg, fingerprint, File_esiste, BASE_DIR)
+            input("Login effettuato, premi invio per continuare... ")
 
     # Fine login
     os.system("cls" if os.name == "nt" else "clear")
@@ -161,66 +179,71 @@ async def main():
 
     # asyncio.create_task(gossip.gossip(peers, ip_pubblico, BASE_DIR))
     # asyncio.create_task(gossip.ceck_unreachable(peers, BASE_DIR))
-    task_server = asyncio.create_task(gossip.ascolto(porta, peers, richieste_in_attesa, chiave, chiave_pubblica, gpg, fingerprint, password, alfabeto, session, BASE_DIR))
-    asyncio.create_task(gossip.ascolta_richieste_webrtc (ip_pubblico, porta_pubblica, Nome, peers, richieste_in_attesa, chiave, chiave_pubblica, gpg, fingerprint, password, alfabeto, session, BASE_DIR))
+    task_server = asyncio.create_task(gossip.ascolto(porta, peers, richieste_in_attesa, chiave_pubblica, gpg, fingerprint, password, session, BASE_DIR))
+    asyncio.create_task(gossip.ascolta_richieste_webrtc (ip_pubblico, porta_pubblica, Nome, peers, richieste_in_attesa, chiave_pubblica, gpg, fingerprint, password, session, BASE_DIR))
     
     A = True
     while A:
-   #    ris = await asyncio.to_thread(input, "1: Visualizza tutti i peer online sulla rete | 2: Inserisci l'indirizzo:porta di un peer per contattarlo | 3: Attendi che qualcuno ti contatti")
-        ris = await asyncio.to_thread(input, "1: Inserisci l'indirizzo:porta di un peer per contattarlo | 2: Attendi che qualcuno ti contatti | 3: visualizza i peer con cui hai già parlato")
-   #    if ris == "1":
-   #        online = gossip.lista_peers("online", peers)
-   #        for o in online:
-   #            print(o["nome"], " ip: ", o["ip"], "Porta: ", o["porta"])
+        ris = await asyncio.to_thread(input, "1: Contatta un peer | 2: Attendi che qualcuno ti contatti | 3: visualizza i peer con cui hai già parlato")
         
         if ris == "1":
             os.system("cls" if os.name == "nt" else "clear")
             selection.print_information(Nome, ip_pubblico, porta_pubblica, tipo_nat, ip_privato, porta, Alg)
             
             ricerca = await asyncio.to_thread(input, "Inserisci l'username o l'ip:porta del destinatario: ")
-            
             procedi = False
             bypass_auth_username = False
-            ip_destinazione, porta_destinazione, username_target, fingerprint_destinatario = None, None, None, None
-            if ":" in ricerca:
-                ip_destinazione, porta_destinazione = ricerca.split(":", 1)
-                print(f"Cerco una corrispondenza per gli indirizzo e porta: {ricerca}")
-                response = selection.ceck_indirizzo(ip_destinazione, porta_destinazione)
-                if response == "OK":
-                    ris = selection.y_n("L'indirizzo cercato non risulta essere salvato sul server, questo significa che non è possibile verificare il fingerprint server-side, tento lo stesso di contattarlo? (y/n)")
-                    if ris == "y":
-                        procedi = True
-                        bypass_auth_username = True
-                elif response.split(",", 2)[0] == "exists":
-                    trash, username_target, fingerprint_destinatario = response.split(",", 3)
-                    print(f"Corrispondenza trovata sul server per l'username '{username_target}': ")
-                    print(f"Ip:porta associati: {ip_destinazione}:{porta_destinazione}")
-                    print(f"Fingerprint associato: {fingerprint_destinatario}")
-                    procedi = True
-                
+            username_target, ip_destinazione, porta_destinazione, fingerprint_destinatario = selection.known_hosts("exists?", ricerca, None, None, None, None, BASE_DIR)
+            
+            if username_target != None:
+                print("Host già registrato localmente, skippo la verifica lato server... ")
+                procedi = True
             else:
-                username_target = ricerca
-                print(f"Cerco una corrispondenza per l'username: {username_target}")
-                response = selection.ceck_nome(username_target)
-                if response == "OK":
-                    print("Il nome non risulta essere salvato sul server, prova a contattare il dispositivo direttamente con il suo ip:porta")
-                elif response.split(",", 3)[0] == "exists":
-                    trash, ip_destinazione, porta_destinazione, fingerprint_destinatario = response.split(",", 3)
-                    print(f"Corrispondenza trovata sul server per l'username '{username_target}': ")
-                    print(f"Ip:porta associati: {ip_destinazione}:{porta_destinazione}")
-                    print(f"Fingerprint associato: {fingerprint_destinatario}")
-                    procedi = True
+                print("Host sconosciuto, cerco sul server... ")
+                ip_destinazione, porta_destinazione, username_target, fingerprint_destinatario = None, None, None, None
+                if ":" in ricerca:
+                    ip_destinazione, porta_destinazione = ricerca.split(":", 1)
+                    print(f"Cerco una corrispondenza per gli indirizzo e porta: {ricerca}")
+                    response = selection.ceck_indirizzo(ip_destinazione, porta_destinazione)
+                    if response == "OK":
+                        ris = selection.y_n("L'indirizzo cercato non risulta essere salvato sul server, questo significa che non è possibile verificare il fingerprint server-side, tento lo stesso di contattarlo? (y/n)")
+                        if ris == "y":
+                            procedi = True
+                            bypass_auth_username = True
+                    elif response.split(",", 2)[0] == "exists":
+                        trash, username_target, fingerprint_destinatario = response.split(",", 3)
+                        procedi = True
+                else:
+                    username_target = ricerca
+                    print(f"Cerco una corrispondenza per l'username: {username_target}")
+                    response = selection.ceck_nome(username_target)
+                    if response == "OK":
+                        ris = selection.y_n("Il nome non risulta essere salvato sul server, provo lo stesso a fare il signaling con webRTC?")
+                        if ris == "y":
+                            procedi = True
+                            bypass_auth_username = True
+                    elif response.split(",", 3)[0] == "exists":
+                        trash, ip_destinazione, porta_destinazione, fingerprint_destinatario = response.split(",", 3)
+                        procedi = True
             
             if procedi == True:
+                if ip_destinazione != None:
+                    print(f"Corrispondenza trovata per l'username '{username_target}': ")
+                    print(f"Ip:porta associati: {ip_destinazione}:{porta_destinazione}")
+                    print(f"Fingerprint associato: {fingerprint_destinatario}")
+                
                 try:
                     print("Provo ad aprire una connessione diretta...")
-                    await network.tenta_connessione_diretta(ip_destinazione, porta_destinazione, Nome, Alg, chiave_pubblica, fingerprint, chiave, alfabeto, gpg, password, session, username_target, fingerprint_destinatario, bypass_auth_username)
+                    await network.tenta_connessione_diretta(ip_destinazione, porta_destinazione, Nome, Alg, chiave_pubblica, fingerprint, gpg, password, session, username_target, fingerprint_destinatario, bypass_auth_username, BASE_DIR)
                         
-                except(ConnectionRefusedError, ConnectionResetError, asyncio.TimeoutError, OSError):
+                except(ConnectionRefusedError, ConnectionResetError, asyncio.TimeoutError, OSError, ValueError):
                     print("Peer irraggiungibile per via diretta, tento con webRTC...")
-                    ricerca = ip_destinazione + ":" + str(porta_destinazione)
+                    if username_target != None:
+                        ricerca = username_target
+                    else:
+                        ricerca = ip_destinazione + ":" + str(porta_destinazione)
                     try:
-                        await network.tenta_connessione_webRTC(ip_pubblico, porta_pubblica, Nome, ricerca, peers, richieste_in_attesa, chiave, chiave_pubblica, gpg, fingerprint, password, alfabeto, session, Alg, username_target, fingerprint_destinatario, bypass_auth_username, BASE_DIR)
+                        await network.tenta_connessione_webRTC(ip_pubblico, porta_pubblica, Nome, ricerca, peers, richieste_in_attesa, chiave_pubblica, gpg, fingerprint, password, session, Alg, username_target, fingerprint_destinatario, bypass_auth_username, BASE_DIR)
                     except Exception as e:
                         print(f"\033[31m E' stato impossibile stabilire una connessione (WebRTC): {e!r} \033[0m")
                 except Exception as e:

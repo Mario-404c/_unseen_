@@ -3,7 +3,7 @@ import base64, json, string, secrets
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer
 import tempfile, gnupg
 from . import gossip
-from . import encryption
+from . import selection
 from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
 import asyncio
@@ -26,7 +26,7 @@ async def ricevi_messaggio(reader):
     testo = (await reader.readexactly(lunghezza)).decode('utf-8')
     return testo
 
-async def handshake_connessione(reader, writer, Nome, Alg, chiave_pubblica, fingerprint, chiave, alfabeto, gpg, password, session, ip_destinazione, porta_destinazione, username_target, fingerprint_destinatario, bypass_ceck_user):
+async def handshake_connessione(reader, writer, Nome, Alg, chiave_pubblica, fingerprint, gpg, password, session, ip_destinazione, porta_destinazione, username_target, fingerprint_destinatario, bypass_ceck_user, base_dir):
     writer.write("CHAT_REQUEST".encode())
     await writer.drain()
     print(f"Richiesta chat inviata con successo a {ip_destinazione}, attendo conferma...")
@@ -55,6 +55,7 @@ async def handshake_connessione(reader, writer, Nome, Alg, chiave_pubblica, fing
             else:
                 print(f"L'utente {Nome_ricevuto} non ha passato il processo di autenticazione, il fingerprint non corrisponde!")
                 writer.close()
+                return
         else:
             print(f"Sto skippando la verifica di {Nome_ricevuto} lato server...")
             Nome_server = Nome_ricevuto
@@ -131,8 +132,12 @@ async def handshake_connessione(reader, writer, Nome, Alg, chiave_pubblica, fing
                     
             if ceck2 == True:
                 print("\033[32m Connessione stabilita con ", Nome_server,"! \033[0m")
-                asyncio.create_task(ricevi(reader, writer, Nome_server, Alg, chiave, alfabeto, gpg, password))
-                await invia_async(reader, writer, Alg, chiave, gpg_sessione, fingerprint_server, alfabeto, session)
+                x, x, x, x = selection.known_hosts("exists?", Nome_server, None, None, None, None, base_dir)
+                if x == None:
+                    selection.known_hosts("load", None, Nome_server, ip_destinazione, porta_destinazione, fingerprint_server, base_dir)
+                
+                asyncio.create_task(ricevi(reader, writer, Nome_server, Alg,  gpg, password))
+                await invia_async(reader, writer, Alg, gpg_sessione, fingerprint_server, session)
                 A = False
             else:
                 print("Torno al menu'...")
@@ -149,28 +154,21 @@ async def handshake_connessione(reader, writer, Nome, Alg, chiave_pubblica, fing
 
 
 
-async def ricevi(reader, writer, NomeCli, Alg, chiave, alfabeto, gpg, password):
+async def ricevi(reader, writer, NomeCli, Alg, gpg, password):
     while True:
         try:
-            if Alg.lower() == "pgp":
-                data = await reader.read(65535)
-            else:
-                data = await reader.read(1024)
+            data = await ricevi_messaggio(reader)
                 
             if not data:
                 print("Connessione chiusa dal server")
                 break
             
             else:
-                chiper = data.decode()
-                if Alg == "cesare":
-                    chiaro = encryption.decripta_cesare(chiper, chiave, alfabeto)
-                elif Alg == "xor":
-                    chiaro = encryption.decripta_Xor(chiper, chiave)
-                elif Alg.lower() =="pgp":
+                chiper = data
+                if Alg.lower() =="pgp":
                     risultato = gpg.decrypt(chiper, passphrase=password)
                     if risultato.ok:
-                        chiaro = risultato.data.decode('utf-8')
+                        chiaro = risultato.data.decode("utf-8")
                     else:
                         print("Errore nella decrittazione del messaggio: ", risultato.status)
                     
@@ -180,7 +178,7 @@ async def ricevi(reader, writer, NomeCli, Alg, chiave, alfabeto, gpg, password):
             print("Errore ricezione:", e)
             break
 
-async def invia_async(reader, writer, Alg, chiave, gpg_sessione, fingerprint_client, alfabeto, session):
+async def invia_async(reader, writer, Alg, gpg_sessione, fingerprint_client, session):
     with patch_stdout():  
         while True:
             try:
@@ -188,22 +186,16 @@ async def invia_async(reader, writer, Alg, chiave, gpg_sessione, fingerprint_cli
             except (EOFError, KeyboardInterrupt):
                 print("\nChiusura invio richiesta dall'utente")
                 break
-            if Alg == "cesare":
-                chiper = encryption.cripta_cesare(chiaro, chiave, alfabeto)
-            elif Alg == "xor":
-                chiper = encryption.cripta_Xor(chiaro, chiave)
-            elif Alg.lower() =="pgp":
+            if Alg.lower() =="pgp":
                 risultato = gpg_sessione.encrypt(chiaro, recipients=[fingerprint_client], always_trust=True)
                 if risultato.ok:
                     chiper = str(risultato)
                 else:
                     print("Errore nella cifratura del messaggio: ", risultato.status)
                     continue
-            writer.write(chiper.encode())
-            await writer.drain()
-
+            await invia_messaggio(writer, chiper)
 # ============================== webRTC ===================================
-async def tenta_connessione_webRTC(indirizzo, porta, Nome, ricerca, peers, richieste_in_attesa, chiave, chiave_pubblica, gpg, fingerprint, password, alfabeto, session, Alg, username_target, fingerprint_destinatario, bypass_ceck_user, base_dir):
+async def tenta_connessione_webRTC(indirizzo, porta, Nome, ricerca, peers, richieste_in_attesa, chiave_pubblica, gpg, fingerprint, password, session, Alg, username_target, fingerprint_destinatario, bypass_ceck_user, base_dir):
 
     pc = RTCPeerConnection(configuration = config)
     channel = pc.createDataChannel("canale")
@@ -297,13 +289,13 @@ async def tenta_connessione_webRTC(indirizzo, porta, Nome, ricerca, peers, richi
             
     requests.get(url = link_invio_dati, params = payload)                               # Pulisci server
     
-    await handshake_connessione(reader, writer, Nome, Alg, chiave_pubblica, fingerprint, chiave, alfabeto, gpg, password, session, ip_destinazione, porta_destinazione, username_target, fingerprint_destinatario, bypass_ceck_user)
+    await handshake_connessione(reader, writer, Nome, Alg, chiave_pubblica, fingerprint, gpg, password, session, ip_destinazione, porta_destinazione, username_target, fingerprint_destinatario, bypass_ceck_user, base_dir)
     
 # ============================== webRTC ===================================
     
 
-async def tenta_connessione_diretta(ip_destinazione, porta_destinazione, Nome, Alg, chiave_pubblica, fingerprint, chiave, alfabeto, gpg, password, session, username_target, fingerprint_destinatario, bypass_ceck_user):
+async def tenta_connessione_diretta(ip_destinazione, porta_destinazione, Nome, Alg, chiave_pubblica, fingerprint, gpg, password, session, username_target, fingerprint_destinatario, bypass_ceck_user, base_dir):
     reader, writer = await asyncio.wait_for(
         asyncio.open_connection(ip_destinazione, porta_destinazione), timeout=10
     )
-    await handshake_connessione(reader, writer, Nome, Alg, chiave_pubblica, fingerprint, chiave, alfabeto, gpg, password, session, ip_destinazione, porta_destinazione, username_target, fingerprint_destinatario, bypass_ceck_user)
+    await handshake_connessione(reader, writer, Nome, Alg, chiave_pubblica, fingerprint, gpg, password, session, ip_destinazione, porta_destinazione, username_target, fingerprint_destinatario, bypass_ceck_user, base_dir)

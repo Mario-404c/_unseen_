@@ -59,7 +59,7 @@ def crea_reader_writer(channel, peername=None):
     writer = DataChannelWriter(channel, peername=peername)
     return reader, writer
 
-async def ascolta_richieste_webrtc(ip_personale, porta_personale, Nome, peers, richieste_in_attesa, chiave, chiave_pubblica, gpg, fingerprint, password, alfabeto, session, base_dir):
+async def ascolta_richieste_webrtc(ip_personale, porta_personale, Nome, peers, richieste_in_attesa, chiave_pubblica, gpg, fingerprint, password, session, base_dir):
     ascolto = True
     while ascolto == True:
         ricerca = True
@@ -170,14 +170,14 @@ async def ascolta_richieste_webrtc(ip_personale, porta_personale, Nome, peers, r
                     
             requests.get(url = link_invio_dati, params = payload)                               # Pulisci server
             
-            await gestisci_connessione(reader, writer, peers, richieste_in_attesa, chiave, chiave_pubblica, gpg, fingerprint, password, alfabeto, session, base_dir, tipo = "webrtc")
+            await gestisci_connessione(reader, writer, peers, richieste_in_attesa, chiave_pubblica, gpg, fingerprint, password, session, base_dir, tipo = "webrtc")
             ascolto = False
             
         else:
             print("Ho rifiutato la richiesta, continuo ad ascoltare...")
         
 
-async def gestisci_connessione(reader, writer, peers, richieste_in_attesa, chiave, chiave_pubblica, gpg, fingerprint, password, alfabeto, session, base_dir, tipo):
+async def gestisci_connessione(reader, writer, peers, richieste_in_attesa, chiave_pubblica, gpg, fingerprint, password, session, base_dir, tipo):
     with open(os.path.join(base_dir, "config.txt"), "r") as f:
             righe = f.readlines()
                     
@@ -245,13 +245,20 @@ async def gestisci_connessione(reader, writer, peers, richieste_in_attesa, chiav
 
         # Verifica username - fingerprint lato server
         fingerprint_target = None
-        response = await asyncio.to_thread(selection.ceck_nome, Nome_client)
-        if response == "OK":
-            esito = None
-            
+        
+        # verifica in known hosts
+        username_target, ip_destinazione, porta_destinazione, fingerprint_target = selection.known_hosts("exists?", Nome_client, None, None, None, None, base_dir)
+        if username_target != None:
+            print(f"Il peer che vuole contattarti è nei known host: {Nome_client} - {fingerprint_target} , procedo... ")
+            esito = "exists"
         else:
-            esito, ip_destinazione, porta_destinazione, fingerprint_target = response.split(",", 3)
-            
+            print(f"Il peer che vuole contattarti non è nei known host, controllo sul server... ")
+            response = await asyncio.to_thread(selection.ceck_nome, Nome_client)
+            if response == "OK":
+                esito = None
+            else:
+                esito, ip_destinazione, porta_destinazione, fingerprint_target = response.split(",", 3)
+                
         if esito == "exists" and fingerprint_target == fingerprint_ricevuto:
             print(f"Il peer che vuole contattarti è autenticato sul server come {Nome_client} - {fingerprint_target} , procedo... ")
             check1 = True
@@ -328,8 +335,12 @@ async def gestisci_connessione(reader, writer, peers, richieste_in_attesa, chiav
                     writer.close()
                     
                 if check2 == True:
-                    asyncio.create_task(network.ricevi(reader, writer, Nome_client, Alg, chiave, alfabeto, gpg, password))
-                    await network.invia_async(reader, writer, Alg, chiave, gpg_sessione, fingerprint_client, alfabeto, session)
+                    x, x, x, x = selection.known_hosts("exists?", Nome_client, None, None, None, None, base_dir)
+                    if x == None:
+                        selection.known_hosts("load", None, Nome_client, ip_destinazione, porta_destinazione, fingerprint_client, base_dir)
+                        
+                    asyncio.create_task(network.ricevi(reader, writer, Nome_client, Alg, gpg, password))
+                    await network.invia_async(reader, writer, Alg, gpg_sessione, fingerprint_client, session)
             
         else:
             await network.invia_messaggio(writer, "REFUSED")
@@ -338,9 +349,9 @@ async def gestisci_connessione(reader, writer, peers, richieste_in_attesa, chiav
             
 
 
-async def ascolto(porta, peers, richieste_in_attesa, chiave, chiave_pubblica, gpg, fingerprint, password, alfabeto, session, base_dir):
+async def ascolto(porta, peers, richieste_in_attesa, chiave_pubblica, gpg, fingerprint, password, session, base_dir):
     server = await asyncio.start_server(
-    lambda r, w: gestisci_connessione(r, w, peers, richieste_in_attesa, chiave, chiave_pubblica, gpg, fingerprint, password, alfabeto, session, base_dir, tipo = "diretto"),
+    lambda r, w: gestisci_connessione(r, w, peers, richieste_in_attesa, chiave_pubblica, gpg, fingerprint, password, session, base_dir, tipo = "diretto"),
     "", int(porta)
 )
     
