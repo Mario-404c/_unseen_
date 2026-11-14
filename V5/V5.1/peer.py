@@ -1,4 +1,4 @@
-import time, sys, json, os, stun, socket, tempfile,subprocess,getpass
+import time, sys, json, os, stun, socket, tempfile, subprocess, getpass
 import gnupg
 from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout

@@ -10,6 +10,8 @@ SecChat is an encrypted terminal chat application written in Python, based on a 
 
 \- **pgp**
 
+In previous versions:
+
 \- **Caesar**
 
 \- **XOR**
@@ -20,7 +22,7 @@ SecChat is an encrypted terminal chat application written in Python, based on a 
 I implemented a webRTC fallback for when the direct connection doesn't work, using a rendezvous server to exchange **only the information for the connection**, i'm working on implementing another fallback on tailscale if webrtc doesn't work. If encounter any problems in the remote communication you should use programs like hamachi or tailscale to create a p2p Vpn
 
 > ⚠️ **Currently deprecated p2p gossip discovery method:**
-I temporarily had to comment all the lines that activated the gossip discovery as i have to work on how to make it happen in remote
+I temporarily had to remove all the lines that activated the gossip discovery as i have to work on how to make it happen in remote
 
 ## Dependencies
 
