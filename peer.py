@@ -8,7 +8,11 @@ from modules import network, gossip, utils
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 session = PromptSession()
-gpg = gnupg.GPG(gnupghome=os.path.join(BASE_DIR,"modules", "keys"))
+
+KEYS_DIR = os.path.join(BASE_DIR, "modules", "keys")
+os.makedirs(KEYS_DIR, mode=0o700, exist_ok=True)
+gpg = gnupg.GPG(gnupghome=KEYS_DIR)
+
 subprocess.run(["gpgconf", "--homedir", os.path.join(BASE_DIR,"modules", "keys"), "--kill", "gpg-agent"])
 config_path = os.path.join(BASE_DIR, "config.json")
 
