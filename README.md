@@ -1,4 +1,4 @@
-# SecChat
+# unseen
 
 
 
@@ -6,11 +6,13 @@
 
 ## Overview
 
-SecChat is an encrypted terminal chat application written in Python, based on a peer-to-peer model. Currently supported encryption algorithms:
+unseen is an encrypted terminal chat application written in Python, based on a peer-to-peer model. The goal of the project is to minimize the level of trust that the user must place in the program, in order to ensure a secure and completely private exchange of messages.
+ 
+Currently supported encryption algorithms:
 
 \- **pgp**
 
-In previous versions:
+In previous versions (for educational purposes only):
 
 \- **Caesar**
 
